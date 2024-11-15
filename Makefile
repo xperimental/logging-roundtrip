@@ -20,7 +20,7 @@ lint: $(GOLANGCI_LINT)
 
 .PHONY: build-binary
 build-binary:
-	$(GO_CMD) build -tags netgo -ldflags "-w -X main.Version=$(VERSION) -X main.GitCommit=$(GIT_COMMIT)" -o logging-roundtrip .
+	$(GO_CMD) build -tags netgo -ldflags "-w -X main.GitCommit=$(GIT_COMMIT)" -o logging-roundtrip .
 
 .PHONY: image
 image:
