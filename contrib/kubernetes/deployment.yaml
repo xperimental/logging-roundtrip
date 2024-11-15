@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    alpha.image.policy.openshift.io/resolve-names: '*'
+    app.openshift.io/route-disabled: "false"
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"roundtrip:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"roundtrip\")].image"}]'
+  name: roundtrip
+spec:
+  selector:
+    matchLabels:
+      app: roundtrip
+  template:
+    metadata:
+      labels:
+        app: roundtrip
+    spec:
+      containers:
+      - image: image-registry.openshift-image-registry.svc:5000/logging-roundtrip/roundtrip:latest
+        imagePullPolicy: Always
+        args:
+        - --config-file
+        - /config/config.yaml
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/live
+            port: 8080
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: roundtrip
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /config
+          name: config
+          readOnly: true
+        - mountPath: /var/run/secrets/logs
+          name: token
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: roundtrip-config
+      - name: token
+        secret:
+          secretName: roundtrip-sa-token

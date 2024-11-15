@@ -1,0 +1,29 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: roundtrip
+  namespace: logging-roundtrip
+spec:
+  failedBuildsHistoryLimit: 5
+  output:
+    to:
+      kind: ImageStreamTag
+      name: roundtrip:latest
+  runPolicy: Serial
+  source:
+    contextDir: /
+    git:
+      uri: https://github.com/xperimental/logging-roundtrip.git
+      ref: main
+    type: Git
+  strategy:
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+    type: Docker
+  successfulBuildsHistoryLimit: 5
+  triggers:
+  - github:
+      secretReference:
+        name: roundtrip-github-webhook-secret
+    type: GitHub
+  - type: ConfigChange
