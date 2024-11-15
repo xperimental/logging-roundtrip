@@ -30,8 +30,9 @@ type SourceConfig struct {
 }
 
 type SinkConfig struct {
-	URL string     `yaml:"url"`
-	TLS *TLSConfig `yaml:"tls"`
+	URL       string     `yaml:"url"`
+	TLS       *TLSConfig `yaml:"tls"`
+	TokenFile string     `yaml:"tokenFile"`
 }
 
 type TLSConfig struct {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/xperimental/logging-roundtrip/internal/component"
 	"github.com/xperimental/logging-roundtrip/internal/config"
+	"github.com/xperimental/logging-roundtrip/internal/sink"
 	"github.com/xperimental/logging-roundtrip/internal/source"
 	"github.com/xperimental/logging-roundtrip/internal/storage"
 	"github.com/xperimental/logging-roundtrip/internal/web"
@@ -38,6 +39,7 @@ func main() {
 
 	components := []component.Component{
 		source.New(cfg.Source, log, store),
+		sink.New(cfg.Sink, log, store),
 		web.NewServer(cfg.Server, log, store, registry),
 	}
 
