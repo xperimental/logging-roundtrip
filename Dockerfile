@@ -24,6 +24,6 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifi
 COPY --from=builder /build/logging-roundtrip /bin/logging-roundtrip
 
 USER nobody
-EXPOSE 9205
+EXPOSE 8080
 
 ENTRYPOINT ["/bin/logging-roundtrip"]
