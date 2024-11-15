@@ -47,6 +47,9 @@ func Parse(cmd string, args []string) (*Config, error) {
 		Server: ServerConfig{
 			ListenAddress: ":8080",
 		},
+		Source: SourceConfig{
+			LogsPerSecond: 1,
+		},
 	}
 
 	flags := pflag.NewFlagSet(cmd, pflag.ContinueOnError)

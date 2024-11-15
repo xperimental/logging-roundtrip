@@ -11,6 +11,8 @@ import (
 
 	"github.com/xperimental/logging-roundtrip/internal/component"
 	"github.com/xperimental/logging-roundtrip/internal/config"
+	"github.com/xperimental/logging-roundtrip/internal/source"
+	"github.com/xperimental/logging-roundtrip/internal/storage"
 	"github.com/xperimental/logging-roundtrip/internal/web"
 )
 
@@ -30,10 +32,11 @@ func main() {
 	}
 	log.SetLevel(cfg.LogLevel)
 
-	components := []component.Component{}
-
-	srv := web.NewServer(cfg.Server, log)
-	components = append(components, srv)
+	store := storage.New()
+	components := []component.Component{
+		source.New(cfg.Source, log, store),
+		web.NewServer(cfg.Server, log),
+	}
 
 	wg := &sync.WaitGroup{}
 	errCh := make(chan error, 1)
