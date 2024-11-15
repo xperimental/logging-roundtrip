@@ -33,6 +33,7 @@ type SinkConfig struct {
 	URL       string     `yaml:"url"`
 	TLS       *TLSConfig `yaml:"tls"`
 	TokenFile string     `yaml:"tokenFile"`
+	Query     string     `yaml:"query"`
 }
 
 type TLSConfig struct {

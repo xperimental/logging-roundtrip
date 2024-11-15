@@ -12,6 +12,7 @@ type Storage struct {
 	messages    map[int64]message
 	nextID      int64
 	metricCount prometheus.Counter
+	metricDelay prometheus.Histogram
 }
 
 type message struct {
@@ -29,9 +30,16 @@ func New(registry prometheus.Registerer) *Storage {
 			Name: "roundtrip_storage_messages_produced_total",
 			Help: "Total number of messages produced by storage",
 		}),
+		metricDelay: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name: "roundtrip_storage_message_delay_seconds",
+			Help: "Measured delay of produced messages.",
+		}),
 	}
 
-	registry.MustRegister(s.metricCount)
+	registry.MustRegister(
+		s.metricCount,
+		s.metricDelay,
+	)
 	return s
 }
 
@@ -58,7 +66,7 @@ func (s *Storage) Count() int {
 	return len(s.messages)
 }
 
-func (s *Storage) Seen(id int64, t time.Time) {
+func (s *Storage) Seen(id int64, t time.Time) time.Duration {
 	s.Lock()
 	defer s.Unlock()
 
@@ -66,6 +74,10 @@ func (s *Storage) Seen(id int64, t time.Time) {
 	msg.Seen = true
 	msg.SeenTimestamp = t
 	s.messages[id] = msg
+
+	delay := t.Sub(msg.Timestamp)
+	s.metricDelay.Observe(delay.Seconds())
+	return delay
 }
 
 func (s *Storage) ResetSeen() {

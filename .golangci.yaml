@@ -25,6 +25,7 @@ linters-settings:
     exclude-functions:
       - (*os.File).Close
       - fmt.Fprintln
+      - (*github.com/coder/websocket.Conn).Close
 
 linters:
   enable-all: false

@@ -3,6 +3,7 @@ module github.com/xperimental/logging-roundtrip
 go 1.23.3
 
 require (
+	github.com/coder/websocket v1.8.12
 	github.com/gorilla/mux v1.8.1
 	github.com/prometheus/client_golang v1.20.5
 	github.com/sirupsen/logrus v1.9.3
