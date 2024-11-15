@@ -26,9 +26,9 @@ type Server struct {
 
 func NewServer(cfg config.ServerConfig, log logrus.FieldLogger, store *storage.Storage, registry prometheus.Gatherer) *Server {
 	m := mux.NewRouter()
-	m.Handle("/live", livenessHandler())
-	m.Handle("/store/count", countHandler(store))
-	m.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+	m.Path("/api/live").Methods(http.MethodGet).Handler(livenessHandler())
+	m.Path("/api/store/count").Methods(http.MethodGet).Handler(countHandler(store))
+	m.Path("/metrics").Methods(http.MethodGet).Handler(promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
 	s := &Server{
 		cfg:           cfg,
