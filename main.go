@@ -1,12 +1,17 @@
 package main
 
 import (
-	"net/http"
+	"context"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/xperimental/logging-roundtrip/internal/component"
 	"github.com/xperimental/logging-roundtrip/internal/config"
+	"github.com/xperimental/logging-roundtrip/internal/web"
 )
 
 var log = &logrus.Logger{
@@ -25,7 +30,39 @@ func main() {
 	}
 	log.SetLevel(cfg.LogLevel)
 
-	if err := http.ListenAndServe(cfg.Server.ListenAddress, nil); err != nil {
-		log.Fatalf("Can not start server: %v", err)
+	components := []component.Component{}
+
+	srv := web.NewServer(cfg.Server, log)
+	components = append(components, srv)
+
+	wg := &sync.WaitGroup{}
+	errCh := make(chan error, 1)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+	loop:
+		for {
+			select {
+			case <-ctx.Done():
+				break loop
+			case err := <-errCh:
+				log.Errorf("Fatal error: %v", err)
+				cancel()
+			}
+		}
+
+		close(errCh)
+	}()
+
+	for _, c := range components {
+		c.Start(ctx, wg, errCh)
 	}
+
+	log.Debug("All components running.")
+	wg.Wait()
+	log.Debug("All components stopped.")
 }

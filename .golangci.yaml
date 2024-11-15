@@ -21,6 +21,9 @@ linters-settings:
     rules:
       - name: package-comments
         disabled: true
+  errcheck:
+    exclude-functions:
+      - (*os.File).Close
 
 linters:
   enable-all: false

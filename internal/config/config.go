@@ -1,9 +1,16 @@
 package config
 
 import (
+	"errors"
+	"fmt"
+	"os"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
+	"gopkg.in/yaml.v3"
 )
+
+var errConfigFileRequired = errors.New("config file is required")
 
 type Config struct {
 	ConfigFile string       `yaml:"-"`
@@ -14,7 +21,8 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	ListenAddress string `yaml:"listenAddress"`
+	ListenAddress string     `yaml:"listenAddress"`
+	TLS           *TLSConfig `yaml:"tls"`
 }
 
 type SourceConfig struct {
@@ -27,12 +35,15 @@ type SinkConfig struct {
 }
 
 type TLSConfig struct {
-	InsecureSkipVerify bool `yaml:"insecureSkipVerify"`
+	InsecureSkipVerify bool   `yaml:"insecureSkipVerify"`
+	CertificateFile    string `yaml:"certificateFile"`
+	KeyFile            string `yaml:"keyFile"`
 }
 
 func Parse(cmd string, args []string) (*Config, error) {
 	cfg := &Config{
 		ConfigFile: "config.yaml",
+		LogLevel:   logrus.InfoLevel,
 		Server: ServerConfig{
 			ListenAddress: ":8080",
 		},
@@ -43,6 +54,20 @@ func Parse(cmd string, args []string) (*Config, error) {
 	err := flags.Parse(args)
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.ConfigFile == "" {
+		return nil, errConfigFileRequired
+	}
+
+	file, err := os.Open(cfg.ConfigFile)
+	if err != nil {
+		return nil, fmt.Errorf("can not read config file: %w", err)
+	}
+	defer file.Close()
+
+	if err := yaml.NewDecoder(file).Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("can not parse config file: %w", err)
 	}
 
 	return cfg, nil
