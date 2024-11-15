@@ -7,9 +7,12 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 
 	"github.com/xperimental/logging-roundtrip/internal/config"
+	"github.com/xperimental/logging-roundtrip/internal/storage"
 )
 
 var errNeedCertificateAndKey = errors.New("need both certificate and key to start TLS server")
@@ -21,8 +24,11 @@ type Server struct {
 	server        *http.Server
 }
 
-func NewServer(cfg config.ServerConfig, log logrus.FieldLogger) *Server {
+func NewServer(cfg config.ServerConfig, log logrus.FieldLogger, store *storage.Storage, registry prometheus.Gatherer) *Server {
 	m := mux.NewRouter()
+	m.Handle("/live", livenessHandler())
+	m.Handle("/store/count", countHandler(store))
+	m.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
 	s := &Server{
 		cfg:           cfg,

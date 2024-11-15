@@ -3,12 +3,15 @@ package storage
 import (
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type Storage struct {
 	sync.RWMutex
-	messages map[int64]message
-	nextID   int64
+	messages    map[int64]message
+	nextID      int64
+	metricCount prometheus.Counter
 }
 
 type message struct {
@@ -18,11 +21,18 @@ type message struct {
 	SeenTimestamp time.Time
 }
 
-func New() *Storage {
-	return &Storage{
+func New(registry prometheus.Registerer) *Storage {
+	s := &Storage{
 		messages: map[int64]message{},
 		nextID:   0,
+		metricCount: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "roundtrip_storage_messages_produced_total",
+			Help: "Total number of messages produced by storage",
+		}),
 	}
+
+	registry.MustRegister(s.metricCount)
+	return s
 }
 
 func (s *Storage) Insert(t time.Time) int64 {
@@ -37,6 +47,7 @@ func (s *Storage) Insert(t time.Time) int64 {
 		Timestamp: t,
 	}
 
+	s.metricCount.Inc()
 	return id
 }
 

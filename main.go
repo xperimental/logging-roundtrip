@@ -7,6 +7,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 
 	"github.com/xperimental/logging-roundtrip/internal/component"
@@ -32,10 +33,12 @@ func main() {
 	}
 	log.SetLevel(cfg.LogLevel)
 
-	store := storage.New()
+	registry := prometheus.NewRegistry()
+	store := storage.New(registry)
+
 	components := []component.Component{
 		source.New(cfg.Source, log, store),
-		web.NewServer(cfg.Server, log),
+		web.NewServer(cfg.Server, log, store, registry),
 	}
 
 	wg := &sync.WaitGroup{}
