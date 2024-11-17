@@ -48,22 +48,11 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
-
-	loop:
-		for {
-			select {
-			case <-ctx.Done():
-				break loop
-			case err := <-errCh:
-				log.Errorf("Fatal error: %v", err)
-				cancel()
-			}
+		for err := range errCh {
+			log.Errorf("Fatal error: %v", err)
+			cancel()
 		}
-
-		close(errCh)
 	}()
 
 	for _, c := range components {
@@ -72,5 +61,6 @@ func main() {
 
 	log.Debug("All components running.")
 	wg.Wait()
+	close(errCh)
 	log.Debug("All components stopped.")
 }
