@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
@@ -35,7 +36,7 @@ func main() {
 	log.SetLevel(cfg.LogLevel)
 
 	registry := prometheus.NewRegistry()
-	store := storage.New(registry)
+	store := storage.New(log, time.Now, registry)
 
 	components := []component.Component{
 		source.New(cfg.Source, log, store),

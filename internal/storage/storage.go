@@ -5,10 +5,14 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
 )
 
 type Storage struct {
 	sync.RWMutex
+	log         logrus.FieldLogger
+	clock       func() time.Time
+	startupTime time.Time
 	messages    map[int64]message
 	nextID      int64
 	metricCount prometheus.Counter
@@ -22,10 +26,13 @@ type message struct {
 	SeenTimestamp time.Time
 }
 
-func New(registry prometheus.Registerer) *Storage {
+func New(log logrus.FieldLogger, clock func() time.Time, registry prometheus.Registerer) *Storage {
 	s := &Storage{
-		messages: map[int64]message{},
-		nextID:   0,
+		log:         log,
+		clock:       clock,
+		startupTime: clock(),
+		messages:    map[int64]message{},
+		nextID:      0,
 		metricCount: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "roundtrip_storage_messages_produced_total",
 			Help: "Total number of messages produced by storage",
@@ -41,6 +48,10 @@ func New(registry prometheus.Registerer) *Storage {
 		s.metricDelay,
 	)
 	return s
+}
+
+func (s *Storage) Startup() time.Time {
+	return s.startupTime
 }
 
 func (s *Storage) Insert(t time.Time) int64 {

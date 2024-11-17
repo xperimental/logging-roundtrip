@@ -51,7 +51,7 @@ func (s *Sink) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error
 	go func() {
 		defer wg.Done()
 
-		client, err := createClient(ctx, s.log, s.cfg)
+		client, err := s.createClient(ctx)
 		if err != nil {
 			errCh <- err
 			return
@@ -108,40 +108,40 @@ func (s *Sink) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error
 	}()
 }
 
-func createClient(ctx context.Context, log logrus.FieldLogger, cfg config.SinkConfig) (*websocket.Conn, error) {
-	if cfg.URL == "" {
+func (s *Sink) createClient(ctx context.Context) (*websocket.Conn, error) {
+	if s.cfg.URL == "" {
 		return nil, errNoSinkURL
 	}
 
-	if cfg.Query == "" {
+	if s.cfg.Query == "" {
 		return nil, errNoQuery
 	}
 
-	u, err := url.Parse(cfg.URL)
+	u, err := url.Parse(s.cfg.URL)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing URL %q: %w", cfg.URL, err)
+		return nil, fmt.Errorf("error parsing URL %q: %w", s.cfg.URL, err)
 	}
 
 	vals := url.Values{
-		"query": []string{cfg.Query},
-		"start": []string{strconv.FormatInt(time.Now().UTC().UnixNano(), 10)},
+		"query": []string{s.cfg.Query},
+		"start": []string{strconv.FormatInt(s.store.Startup().UnixNano(), 10)},
 	}
 	u.RawQuery = vals.Encode()
-	log.Debugf("Sink URL: %s", u.String())
+	s.log.Debugf("Sink URL: %s", u.String())
 
 	opts := &websocket.DialOptions{}
-	if cfg.TLS != nil {
+	if s.cfg.TLS != nil {
 		opts.HTTPClient = &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: cfg.TLS.InsecureSkipVerify,
+					InsecureSkipVerify: s.cfg.TLS.InsecureSkipVerify,
 				},
 			},
 		}
 	}
 
-	if cfg.TokenFile != "" {
-		tokenBytes, err := os.ReadFile(cfg.TokenFile)
+	if s.cfg.TokenFile != "" {
+		tokenBytes, err := os.ReadFile(s.cfg.TokenFile)
 		if err != nil {
 			return nil, fmt.Errorf("can not read token file: %w", err)
 		}
