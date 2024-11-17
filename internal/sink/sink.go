@@ -100,8 +100,7 @@ func (s *Sink) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error
 						continue
 					}
 
-					msgDelay := s.store.Seen(msgId, msgTime)
-					s.log.Debugf("Message %v had %s delay.", msgId, msgDelay)
+					s.store.Seen(msgId, msgTime)
 				}
 			}
 		}

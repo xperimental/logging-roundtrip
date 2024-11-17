@@ -55,9 +55,8 @@ func (s *source) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- err
 			select {
 			case <-ctx.Done():
 				return
-			case t := <-ticker.C:
-				id := s.storage.Insert(t)
-				msg := fmt.Sprintf("time=%s id=%d\n", t.UTC().Format(time.RFC3339Nano), id)
+			case <-ticker.C:
+				msg := s.storage.Create()
 
 				if _, err := s.output.Write([]byte(msg)); err != nil {
 					errCh <- fmt.Errorf("error writing to output: %w", err)

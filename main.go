@@ -39,6 +39,7 @@ func main() {
 	store := storage.New(log, time.Now, registry)
 
 	components := []component.Component{
+		store,
 		source.New(cfg.Source, log, store),
 		sink.New(cfg.Sink, log, store),
 		web.NewServer(cfg.Server, log, store, registry),
