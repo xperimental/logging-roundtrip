@@ -19,14 +19,18 @@ import (
 	"github.com/xperimental/logging-roundtrip/internal/web"
 )
 
-var log = &logrus.Logger{
-	Out:          os.Stderr,
-	Formatter:    &logrus.TextFormatter{},
-	Hooks:        logrus.LevelHooks{},
-	Level:        logrus.InfoLevel,
-	ExitFunc:     os.Exit,
-	ReportCaller: false,
-}
+var (
+	GitCommit = "unknown"
+
+	log = &logrus.Logger{
+		Out:          os.Stderr,
+		Formatter:    &logrus.TextFormatter{},
+		Hooks:        logrus.LevelHooks{},
+		Level:        logrus.InfoLevel,
+		ExitFunc:     os.Exit,
+		ReportCaller: false,
+	}
+)
 
 func main() {
 	cfg, err := config.Parse(os.Args[0], os.Args[1:])
@@ -34,6 +38,7 @@ func main() {
 		log.Fatalf("Can not load configuration: %v", err)
 	}
 	log.SetLevel(cfg.LogLevel)
+	log.Infof("logging-roundtrip (commit: %s)", GitCommit)
 
 	registry := prometheus.NewRegistry()
 	store := storage.New(log, time.Now, registry)
