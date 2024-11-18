@@ -119,7 +119,7 @@ func (s *Storage) Seen(id int64, t time.Time) {
 
 		delay := t.Sub(msg.Timestamp)
 		s.metricDelay.Observe(delay.Seconds())
-		s.log.Debugf("Message id=%v had delay %s", id, delay)
+		s.log.Debugf("Message %v had delay %s", id, delay)
 
 		return nil
 	}
