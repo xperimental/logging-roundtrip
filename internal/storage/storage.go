@@ -68,10 +68,15 @@ func (s *Storage) Start(ctx context.Context, wg *sync.WaitGroup, _ chan<- error)
 		defer wg.Done()
 		defer close(s.ops)
 
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
+			case <-ticker.C:
+				s.printStatisticsInner()
 			case op := <-s.ops:
 				if err := op(s.messages); err != nil {
 					s.log.Debugf("Error during store operation: %s", err)
@@ -135,4 +140,18 @@ func (s *Storage) ResetSeen() {
 
 		return nil
 	}
+}
+
+func (s *Storage) printStatisticsInner() {
+	created := 0
+	seen := 0
+	for _, m := range s.messages {
+		created++
+		if m.Seen {
+			seen++
+		}
+	}
+	percent := float64(seen) / float64(created) * 100
+
+	s.log.Infof("Message state: %d messages sent, %d seen (%.3f %%)", created, seen, percent)
 }
