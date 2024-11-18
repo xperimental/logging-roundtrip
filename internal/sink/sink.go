@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -147,7 +148,7 @@ func (s *Sink) createClient(ctx context.Context) (*websocket.Conn, error) {
 
 		opts.HTTPHeader = http.Header{
 			"Authorization": []string{
-				fmt.Sprintf("Bearer %s", string(tokenBytes)),
+				fmt.Sprintf("Bearer %s", strings.TrimSpace(string(tokenBytes))),
 			},
 		}
 	}
