@@ -60,6 +60,8 @@ func (s *Sink) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error
 
 			err := s.receiveMessages(ctx)
 			switch {
+			case errors.Is(err, context.Canceled):
+				return
 			case errors.Is(err, net.ErrClosed), errors.Is(err, io.EOF):
 				s.log.Debugf("Connection closed: %s", err)
 				continue
