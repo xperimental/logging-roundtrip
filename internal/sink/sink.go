@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -59,7 +60,7 @@ func (s *Sink) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error
 
 			err := s.receiveMessages(ctx)
 			switch {
-			case errors.Is(err, net.ErrClosed):
+			case errors.Is(err, net.ErrClosed), errors.Is(err, io.EOF):
 				s.log.Debugf("Connection closed: %s", err)
 				continue
 			case err != nil:
