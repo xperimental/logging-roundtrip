@@ -145,12 +145,14 @@ func (s *Sink) createClient(ctx context.Context) (*websocket.Conn, error) {
 		if err != nil {
 			return nil, fmt.Errorf("can not read token file: %w", err)
 		}
+		token := strings.TrimSpace(string(tokenBytes))
 
 		opts.HTTPHeader = http.Header{
 			"Authorization": []string{
-				fmt.Sprintf("Bearer %s", strings.TrimSpace(string(tokenBytes))),
+				fmt.Sprintf("Bearer %s", token),
 			},
 		}
+		s.log.Debugf("Using bearer token: %s", token[:10])
 	}
 
 	conn, _, err := websocket.Dial(ctx, u.String(), opts)
