@@ -171,6 +171,7 @@ func (s *Sink) createClient(ctx context.Context) (*websocket.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+	conn.SetReadLimit(-1)
 
 	return conn, nil
 }
