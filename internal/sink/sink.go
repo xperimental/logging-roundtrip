@@ -52,60 +52,72 @@ func (s *Sink) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error
 	go func() {
 		defer wg.Done()
 
-		client, err := s.createClient(ctx)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		defer client.Close(websocket.StatusNormalClosure, "exiting")
-
 		for {
 			if ctx.Err() != nil {
 				return
 			}
 
-			msgType, msgBytes, err := client.Read(ctx)
+			err := s.receiveMessages(ctx)
 			switch {
 			case errors.Is(err, net.ErrClosed):
-				errCh <- fmt.Errorf("server closed connection: %w", err)
-				return
+				s.log.Debugf("Connection closed: %s", err)
+				continue
 			case err != nil:
-				s.log.Errorf("Error getting websocket message: %s", err)
-				continue
-			}
-
-			if msgType != websocket.MessageText {
-				s.log.Warnf("Skipping non-text message: %s", msgBytes)
-				continue
-			}
-
-			var msg loki.Message
-			if err := json.Unmarshal(msgBytes, &msg); err != nil {
-				s.log.Errorf("Error unmarshalling message: %s", err)
-				continue
-			}
-
-			for _, stream := range msg.Streams {
-				for _, entry := range stream.Values {
-					unixNanos, err := strconv.ParseInt(entry[0], 10, 64)
-					if err != nil {
-						s.log.Errorf("Error parsing timestamp: %s", err)
-						continue
-					}
-
-					msgTime := time.Unix(0, unixNanos)
-					idMatch := idPattern.FindString(entry[1])
-					msgId, err := strconv.ParseInt(idMatch[3:], 10, 64)
-					if err != nil {
-						s.log.Errorf("Error parsing message id: %s", err)
-						continue
-					}
-
-					s.store.Seen(msgId, msgTime)
-				}
+				errCh <- err
+				return
 			}
 		}
 	}()
+}
+
+func (s *Sink) receiveMessages(ctx context.Context) error {
+	client, err := s.createClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer client.Close(websocket.StatusNormalClosure, "exiting")
+
+	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+
+		msgType, msgBytes, err := client.Read(ctx)
+		if err != nil {
+			return err
+		}
+
+		if msgType != websocket.MessageText {
+			s.log.Warnf("Skipping non-text message: %s", msgBytes)
+			continue
+		}
+
+		var msg loki.Message
+		if err := json.Unmarshal(msgBytes, &msg); err != nil {
+			s.log.Errorf("Error unmarshalling message: %s", err)
+			continue
+		}
+
+		for _, stream := range msg.Streams {
+			for _, entry := range stream.Values {
+				unixNanos, err := strconv.ParseInt(entry[0], 10, 64)
+				if err != nil {
+					s.log.Errorf("Error parsing timestamp: %s", err)
+					continue
+				}
+
+				msgTime := time.Unix(0, unixNanos)
+				idMatch := idPattern.FindString(entry[1])
+				msgId, err := strconv.ParseInt(idMatch[3:], 10, 64)
+				if err != nil {
+					s.log.Errorf("Error parsing message id: %s", err)
+					continue
+				}
+
+				s.store.Seen(msgId, msgTime)
+			}
+		}
+	}
 }
 
 func (s *Sink) createClient(ctx context.Context) (*websocket.Conn, error) {
