@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/xperimental/logging-roundtrip/internal/config"
+	"github.com/xperimental/logging-roundtrip/internal/sink"
 	"github.com/xperimental/logging-roundtrip/internal/storage"
 )
 
@@ -24,10 +25,11 @@ type Server struct {
 	server        *http.Server
 }
 
-func NewServer(cfg config.ServerConfig, log logrus.FieldLogger, store *storage.Storage, registry prometheus.Gatherer) *Server {
+func NewServer(cfg config.ServerConfig, log logrus.FieldLogger, store *storage.Storage, registry prometheus.Gatherer, sink sink.Sink) *Server {
 	m := mux.NewRouter()
 	m.Path("/api/live").Methods(http.MethodGet).Handler(livenessHandler())
 	m.Path("/api/store/count").Methods(http.MethodGet).Handler(countHandler(store))
+	m.Path("/debug/disconnect").Methods(http.MethodGet).Handler(disconnectHandler(sink))
 	m.Path("/metrics").Methods(http.MethodGet).Handler(promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
 	s := &Server{

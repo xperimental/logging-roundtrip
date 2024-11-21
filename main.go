@@ -42,12 +42,13 @@ func main() {
 
 	registry := prometheus.NewRegistry()
 	store := storage.New(log, time.Now, registry)
+	s := sink.New(cfg.Sink, log, store)
 
 	components := []component.Component{
 		store,
+		s,
 		source.New(cfg.Source, log, store),
-		sink.New(cfg.Sink, log, store),
-		web.NewServer(cfg.Server, log, store, registry),
+		web.NewServer(cfg.Server, log, store, registry, s),
 	}
 
 	wg := &sync.WaitGroup{}

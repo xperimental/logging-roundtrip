@@ -33,25 +33,43 @@ var (
 	idPattern = regexp.MustCompile(`id=(\d+)`)
 )
 
-type Sink struct {
+type command string
+
+const (
+	disconnectCommand command = "disconnect"
+)
+
+type Sink interface {
+	component.Component
+	Disconnect()
+}
+
+type sink struct {
 	cfg   config.SinkConfig
 	log   logrus.FieldLogger
 	store *storage.Storage
+	cmd   chan command
 }
 
-func New(cfg config.SinkConfig, log logrus.FieldLogger, store *storage.Storage) component.Component {
-	return &Sink{
+func New(cfg config.SinkConfig, log logrus.FieldLogger, store *storage.Storage) Sink {
+	return &sink{
 		cfg:   cfg,
 		log:   log,
 		store: store,
+		cmd:   make(chan command, 1),
 	}
 }
 
-func (s *Sink) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error) {
+func (s *sink) Disconnect() {
+	s.cmd <- disconnectCommand
+}
+
+func (s *sink) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error) {
 	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
+		defer close(s.cmd)
 
 		for {
 			if ctx.Err() != nil {
@@ -73,7 +91,7 @@ func (s *Sink) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error
 	}()
 }
 
-func (s *Sink) receiveMessages(ctx context.Context) error {
+func (s *sink) receiveMessages(ctx context.Context) error {
 	client, err := s.createClient(ctx)
 	if err != nil {
 		return err
@@ -81,53 +99,56 @@ func (s *Sink) receiveMessages(ctx context.Context) error {
 	defer client.Close(websocket.StatusNormalClosure, "exiting")
 
 	for {
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
 			return nil
-		}
+		case <-s.cmd:
+			return net.ErrClosed
+		default:
+			msgType, msgBytes, err := client.Read(ctx)
+			if err != nil {
+				return err
+			}
 
-		msgType, msgBytes, err := client.Read(ctx)
-		if err != nil {
-			return err
-		}
+			if msgType != websocket.MessageText {
+				s.log.Warnf("Skipping non-text message: %s", msgBytes)
+				continue
+			}
 
-		if msgType != websocket.MessageText {
-			s.log.Warnf("Skipping non-text message: %s", msgBytes)
-			continue
-		}
+			var msg loki.Message
+			if err := json.Unmarshal(msgBytes, &msg); err != nil {
+				s.log.Errorf("Error unmarshalling message: %s", err)
+				continue
+			}
 
-		var msg loki.Message
-		if err := json.Unmarshal(msgBytes, &msg); err != nil {
-			s.log.Errorf("Error unmarshalling message: %s", err)
-			continue
-		}
+			for _, stream := range msg.Streams {
+				for _, entry := range stream.Values {
+					unixNanos, err := strconv.ParseInt(entry[0], 10, 64)
+					if err != nil {
+						s.log.Errorf("Error parsing timestamp: %s", err)
+						continue
+					}
 
-		for _, stream := range msg.Streams {
-			for _, entry := range stream.Values {
-				unixNanos, err := strconv.ParseInt(entry[0], 10, 64)
-				if err != nil {
-					s.log.Errorf("Error parsing timestamp: %s", err)
-					continue
+					msgTime := time.Unix(0, unixNanos)
+					idMatch := idPattern.FindString(entry[1])
+					if idMatch == "" {
+						continue
+					}
+
+					msgId, err := strconv.ParseInt(idMatch[3:], 10, 64)
+					if err != nil {
+						s.log.Errorf("Error parsing message id: %s", err)
+						continue
+					}
+
+					s.store.Seen(msgId, msgTime)
 				}
-
-				msgTime := time.Unix(0, unixNanos)
-				idMatch := idPattern.FindString(entry[1])
-				if idMatch == "" {
-					continue
-				}
-
-				msgId, err := strconv.ParseInt(idMatch[3:], 10, 64)
-				if err != nil {
-					s.log.Errorf("Error parsing message id: %s", err)
-					continue
-				}
-
-				s.store.Seen(msgId, msgTime)
 			}
 		}
 	}
 }
 
-func (s *Sink) createClient(ctx context.Context) (*websocket.Conn, error) {
+func (s *sink) createClient(ctx context.Context) (*websocket.Conn, error) {
 	if s.cfg.URL == "" {
 		return nil, errNoSinkURL
 	}
