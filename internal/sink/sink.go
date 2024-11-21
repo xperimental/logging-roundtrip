@@ -111,6 +111,10 @@ func (s *Sink) receiveMessages(ctx context.Context) error {
 
 				msgTime := time.Unix(0, unixNanos)
 				idMatch := idPattern.FindString(entry[1])
+				if idMatch == "" {
+					continue
+				}
+
 				msgId, err := strconv.ParseInt(idMatch[3:], 10, 64)
 				if err != nil {
 					s.log.Errorf("Error parsing message id: %s", err)
