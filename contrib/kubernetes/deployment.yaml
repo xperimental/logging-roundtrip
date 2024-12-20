@@ -1,10 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  annotations:
-    alpha.image.policy.openshift.io/resolve-names: '*'
-    app.openshift.io/route-disabled: "false"
-    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"roundtrip:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"roundtrip\")].image"}]'
   name: roundtrip
 spec:
   selector:
@@ -16,7 +12,7 @@ spec:
         app: roundtrip
     spec:
       containers:
-      - image: image-registry.openshift-image-registry.svc:5000/logging-roundtrip/roundtrip:latest
+      - image: ghcr.io/xperimental/logging-roundtrip:main
         imagePullPolicy: Always
         args:
         - --config-file

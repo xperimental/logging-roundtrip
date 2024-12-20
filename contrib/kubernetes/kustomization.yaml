@@ -1,10 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: logging-roundtrip
-commonAnnotations:
-  app.openshift.io/vcs-ref: main
-  app.openshift.io/vcs-uri: https://github.com/xperimental/logging-roundtrip.git
-  openshift.io/generated-by: OpenShiftWebConsole
 labels:
 - pairs:
     app: roundtrip
@@ -17,11 +13,8 @@ configMapGenerator:
   files:
   - config/config.yaml
 resources:
-- buildconfig.yaml
 - deployment.yaml
-- imagestream.yaml
 - namespace.yaml
 - rbac.yaml
 - route.yaml
-- secret.yaml
 - service.yaml
