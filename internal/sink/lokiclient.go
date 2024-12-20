@@ -45,13 +45,21 @@ type lokiClientSink struct {
 	cmd   chan command
 }
 
-func newLokiClient(cfg *config.LokiClientSink, log logrus.FieldLogger, store *storage.Storage) Sink {
+func newLokiClient(cfg *config.LokiClientSink, log logrus.FieldLogger, store *storage.Storage) (Sink, error) {
+	if cfg.URL == "" {
+		return nil, errNoSinkURL
+	}
+
+	if cfg.Query == "" {
+		return nil, errNoQuery
+	}
+
 	return &lokiClientSink{
 		cfg:   cfg,
 		log:   log,
 		store: store,
 		cmd:   make(chan command, 1),
-	}
+	}, nil
 }
 
 func (s *lokiClientSink) Disconnect() {
@@ -143,14 +151,6 @@ func (s *lokiClientSink) receiveMessages(ctx context.Context) error {
 }
 
 func (s *lokiClientSink) createClient(ctx context.Context) (*websocket.Conn, error) {
-	if s.cfg.URL == "" {
-		return nil, errNoSinkURL
-	}
-
-	if s.cfg.Query == "" {
-		return nil, errNoQuery
-	}
-
 	u, err := url.Parse(s.cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing URL %q: %w", s.cfg.URL, err)

@@ -27,7 +27,7 @@ func New(cfg config.SinkConfig, log logrus.FieldLogger, store *storage.Storage) 
 			return nil, ErrEmptySinkConfig
 		}
 
-		return newLokiClient(cfg.LokiClient, log, store), nil
+		return newLokiClient(cfg.LokiClient, log, store)
 	default:
 		return nil, ErrUnknownSinkType
 	}
