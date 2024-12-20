@@ -61,6 +61,14 @@ func newLokiClient(cfg *config.LokiClientSink, log logrus.FieldLogger, store *st
 		return nil, errNoQuery
 	}
 
+	if cfg.QueryInterval == 0 {
+		cfg.QueryInterval = defaultQueryInterval
+	}
+
+	if cfg.QueryLimit == 0 {
+		cfg.QueryLimit = defaultQueryLimit
+	}
+
 	return &lokiClientSink{
 		cfg:   cfg,
 		log:   log,
@@ -80,12 +88,36 @@ func (s *lokiClientSink) Start(ctx context.Context, wg *sync.WaitGroup, errCh ch
 		defer wg.Done()
 		defer close(s.cmd)
 
+		s.log.Debugf("Query interval: %s", s.cfg.QueryInterval)
+		queryTicker := time.NewTicker(s.cfg.QueryInterval)
+		defer queryTicker.Stop()
+
+		if !s.cfg.DisableTail {
+			s.startTail(ctx, wg, errCh)
+		}
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ts := <-queryTicker.C:
+				go s.queryMessages(ctx, ts)
+			}
+		}
+	}()
+}
+
+func (s *lokiClientSink) startTail(ctx context.Context, wg *sync.WaitGroup, errCh chan<- error) {
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
 		for {
 			if ctx.Err() != nil {
 				return
 			}
 
-			err := s.receiveMessages(ctx)
+			err := s.tailLoop(ctx)
 			switch {
 			case errors.Is(err, context.Canceled):
 				return
@@ -100,24 +132,12 @@ func (s *lokiClientSink) Start(ctx context.Context, wg *sync.WaitGroup, errCh ch
 	}()
 }
 
-func (s *lokiClientSink) receiveMessages(ctx context.Context) error {
-	client, err := s.createClient(ctx)
+func (s *lokiClientSink) tailLoop(ctx context.Context) error {
+	client, err := s.connectTail(ctx)
 	if err != nil {
 		return err
 	}
 	defer client.Close(websocket.StatusNormalClosure, "exiting")
-
-	if s.cfg.QueryInterval == 0 {
-		s.cfg.QueryInterval = defaultQueryInterval
-	}
-
-	if s.cfg.QueryLimit == 0 {
-		s.cfg.QueryLimit = defaultQueryLimit
-	}
-
-	s.log.Debugf("Query interval: %s", s.cfg.QueryInterval)
-	queryTicker := time.NewTicker(s.cfg.QueryInterval)
-	defer queryTicker.Stop()
 
 	for {
 		select {
@@ -125,8 +145,6 @@ func (s *lokiClientSink) receiveMessages(ctx context.Context) error {
 			return nil
 		case <-s.cmd:
 			return net.ErrClosed
-		case ts := <-queryTicker.C:
-			go s.queryMessages(ctx, ts)
 		default:
 			msgType, msgBytes, err := client.Read(ctx)
 			if err != nil {
@@ -194,7 +212,7 @@ func (s *lokiClientSink) createHTTPClient() *http.Client {
 	return c
 }
 
-func (s *lokiClientSink) createClient(ctx context.Context) (*websocket.Conn, error) {
+func (s *lokiClientSink) connectTail(ctx context.Context) (*websocket.Conn, error) {
 	tailURL, err := url.JoinPath(s.cfg.URL, lokiTailPath)
 	if err != nil {
 		return nil, fmt.Errorf("error creating tail URL: %w", err)

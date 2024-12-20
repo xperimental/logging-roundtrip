@@ -50,6 +50,7 @@ type LokiClientSink struct {
 	Query         string        `yaml:"query"`
 	QueryInterval time.Duration `yaml:"queryInterval"`
 	QueryLimit    uint64        `yaml:"queryLimit"`
+	DisableTail   bool          `yaml:"disableTail"`
 }
 
 type TLSConfig struct {
