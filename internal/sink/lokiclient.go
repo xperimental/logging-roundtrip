@@ -36,6 +36,8 @@ type command string
 
 const (
 	disconnectCommand command = "disconnect"
+
+	lokiTailPath = "loki/api/v1/tail"
 )
 
 type lokiClientSink struct {
@@ -151,7 +153,12 @@ func (s *lokiClientSink) receiveMessages(ctx context.Context) error {
 }
 
 func (s *lokiClientSink) createClient(ctx context.Context) (*websocket.Conn, error) {
-	u, err := url.Parse(s.cfg.URL)
+	tailURL, err := url.JoinPath(s.cfg.URL, lokiTailPath)
+	if err != nil {
+		return nil, fmt.Errorf("error creating tail URL: %w", err)
+	}
+
+	u, err := url.Parse(tailURL)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing URL %q: %w", s.cfg.URL, err)
 	}
