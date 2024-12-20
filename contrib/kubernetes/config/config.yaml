@@ -1,6 +1,7 @@
 logLevel: info
 source:
   logsPerSecond: 3
+  numberOfMessages: 55
 sink:
   type: lokiClient
   lokiClient:
