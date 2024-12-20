@@ -120,6 +120,11 @@ func (s *Storage) Seen(id uint64, t time.Time) {
 			return nil
 		}
 
+		if msg.Seen {
+			// silently ignore duplicates
+			return nil
+		}
+
 		msg.Seen = true
 		msg.SeenTimestamp = t
 		s.messages[id] = msg
