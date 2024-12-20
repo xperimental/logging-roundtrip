@@ -71,6 +71,8 @@ func (s *source) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- err
 				s.messageCount++
 				if s.cfg.NumberOfMessages > 0 && s.messageCount >= s.cfg.NumberOfMessages {
 					s.log.Debugf("Reached number of messages limit: %v", s.cfg.NumberOfMessages)
+
+					s.storage.SetAllSent()
 					break loop
 				}
 			}

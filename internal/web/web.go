@@ -27,6 +27,7 @@ type Server struct {
 
 func NewServer(cfg config.ServerConfig, log logrus.FieldLogger, store *storage.Storage, registry prometheus.Gatherer, sink sink.Sink) *Server {
 	m := mux.NewRouter()
+	m.Path("/api/complete").Methods(http.MethodGet).HandlerFunc(completeHandler(store))
 	m.Path("/api/live").Methods(http.MethodGet).Handler(livenessHandler())
 	m.Path("/api/store/count").Methods(http.MethodGet).Handler(countHandler(store))
 	m.Path("/debug/disconnect").Methods(http.MethodGet).Handler(disconnectHandler(sink))

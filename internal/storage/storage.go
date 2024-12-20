@@ -16,6 +16,7 @@ type Storage struct {
 	startupTime time.Time
 
 	messages    sync.Map
+	allSent     bool
 	metricCount prometheus.Counter
 	metricDelay prometheus.Histogram
 }
@@ -76,6 +77,10 @@ func (s *Storage) Start(ctx context.Context, wg *sync.WaitGroup, _ chan<- error)
 
 func (s *Storage) Startup() time.Time {
 	return s.startupTime
+}
+
+func (s *Storage) SetAllSent() {
+	s.allSent = true
 }
 
 func (s *Storage) Create(id uint64, time time.Time) string {
@@ -140,6 +145,25 @@ func (s *Storage) OldestUnseenTime() (time.Time, bool) {
 	})
 
 	return oldest, haveUnseen
+}
+
+func (s *Storage) IsComplete() bool {
+	if !s.allSent {
+		return false
+	}
+
+	allSeen := true
+	s.messages.Range(func(_, v interface{}) bool {
+		msg := v.(message)
+		if !msg.Seen {
+			allSeen = false
+			return false
+		}
+
+		return true
+	})
+
+	return allSeen
 }
 
 func (s *Storage) printStatisticsInner() {

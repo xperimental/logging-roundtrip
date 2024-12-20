@@ -27,3 +27,10 @@ func disconnectHandler(sink sink.Sink) http.HandlerFunc {
 		fmt.Fprintln(w, "done.")
 	}
 }
+
+func completeHandler(store *storage.Storage) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		complete := store.IsComplete()
+		fmt.Fprintln(w, complete)
+	}
+}
