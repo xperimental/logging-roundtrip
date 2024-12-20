@@ -26,8 +26,9 @@ import (
 )
 
 var (
-	errNoSinkURL = errors.New("sink URL can not be empty")
-	errNoQuery   = errors.New("query can not be empty")
+	errNoSinkURL  = errors.New("sink URL can not be empty")
+	errNoQuery    = errors.New("query can not be empty")
+	errHTTPStatus = errors.New("got non-ok HTTP status code")
 
 	idPattern = regexp.MustCompile(`id=(\d+)`)
 )
@@ -37,7 +38,10 @@ type command string
 const (
 	disconnectCommand command = "disconnect"
 
-	lokiTailPath = "loki/api/v1/tail"
+	defaultQueryInterval = 10 * time.Second
+
+	lokiTailPath  = "loki/api/v1/tail"
+	lokiQueryPath = "loki/api/v1/query_range"
 )
 
 type lokiClientSink struct {
@@ -102,12 +106,22 @@ func (s *lokiClientSink) receiveMessages(ctx context.Context) error {
 	}
 	defer client.Close(websocket.StatusNormalClosure, "exiting")
 
+	if s.cfg.QueryInterval == 0 {
+		s.cfg.QueryInterval = defaultQueryInterval
+	}
+
+	s.log.Debugf("Query interval: %s", s.cfg.QueryInterval)
+	queryTicker := time.NewTicker(s.cfg.QueryInterval)
+	defer queryTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-s.cmd:
 			return net.ErrClosed
+		case ts := <-queryTicker.C:
+			go s.queryMessages(ctx, ts)
 		default:
 			msgType, msgBytes, err := client.Read(ctx)
 			if err != nil {
@@ -125,31 +139,54 @@ func (s *lokiClientSink) receiveMessages(ctx context.Context) error {
 				continue
 			}
 
-			for _, stream := range msg.Streams {
-				for _, entry := range stream.Values {
-					unixNanos, err := strconv.ParseInt(entry[0], 10, 64)
-					if err != nil {
-						s.log.Errorf("Error parsing timestamp: %s", err)
-						continue
-					}
-
-					msgTime := time.Unix(0, unixNanos)
-					idMatch := idPattern.FindString(entry[1])
-					if idMatch == "" {
-						continue
-					}
-
-					msgId, err := strconv.ParseUint(idMatch[3:], 10, 64)
-					if err != nil {
-						s.log.Errorf("Error parsing message id: %s", err)
-						continue
-					}
-
-					s.store.Seen(msgId, msgTime)
-				}
-			}
+			s.parseStreams(msg.Streams)
 		}
 	}
+}
+
+func (s *lokiClientSink) parseStreams(streams []loki.Stream) {
+	for _, stream := range streams {
+		for _, entry := range stream.Values {
+			unixNanos, err := strconv.ParseInt(entry[0], 10, 64)
+			if err != nil {
+				s.log.Errorf("Error parsing timestamp: %s", err)
+				continue
+			}
+
+			msgTime := time.Unix(0, unixNanos)
+			idMatch := idPattern.FindString(entry[1])
+			if idMatch == "" {
+				continue
+			}
+
+			msgId, err := strconv.ParseUint(idMatch[3:], 10, 64)
+			if err != nil {
+				s.log.Errorf("Error parsing message id: %s", err)
+				continue
+			}
+
+			s.store.Seen(msgId, msgTime)
+		}
+	}
+}
+
+func (s *lokiClientSink) createHTTPClient() *http.Client {
+	c := &http.Client{
+		Timeout: 60 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	if s.cfg.TLS != nil {
+		c.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: s.cfg.TLS.InsecureSkipVerify,
+			},
+		}
+	}
+
+	return c
 }
 
 func (s *lokiClientSink) createClient(ctx context.Context) (*websocket.Conn, error) {
@@ -168,18 +205,10 @@ func (s *lokiClientSink) createClient(ctx context.Context) (*websocket.Conn, err
 		"start": []string{strconv.FormatInt(s.store.Startup().UnixNano(), 10)},
 	}
 	u.RawQuery = vals.Encode()
-	s.log.Debugf("Sink URL: %s", u.String())
+	s.log.Debugf("Tail URL: %s", u.String())
 
 	opts := &websocket.DialOptions{}
-	if s.cfg.TLS != nil {
-		opts.HTTPClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: s.cfg.TLS.InsecureSkipVerify,
-				},
-			},
-		}
-	}
+	opts.HTTPClient = s.createHTTPClient()
 
 	if s.cfg.TokenFile != "" {
 		tokenBytes, err := os.ReadFile(s.cfg.TokenFile)
@@ -203,4 +232,67 @@ func (s *lokiClientSink) createClient(ctx context.Context) (*websocket.Conn, err
 	conn.SetReadLimit(-1)
 
 	return conn, nil
+}
+
+func (s *lokiClientSink) queryMessages(ctx context.Context, ts time.Time) {
+	if err := s.queryMessagesInner(ctx, ts); err != nil {
+		s.log.Errorf("Error querying messages: %s", err)
+	}
+}
+
+func (s *lokiClientSink) queryMessagesInner(ctx context.Context, ts time.Time) error {
+	queryURL, err := url.JoinPath(s.cfg.URL, lokiQueryPath)
+	if err != nil {
+		return fmt.Errorf("error creating query URL: %w", err)
+	}
+
+	u, err := url.Parse(queryURL)
+	if err != nil {
+		return fmt.Errorf("error parsing query URL %q: %w", s.cfg.URL, err)
+	}
+
+	vals := url.Values{
+		"query":     []string{s.cfg.Query},
+		"start":     []string{strconv.FormatInt(s.store.Startup().UnixNano(), 10)},
+		"end":       []string{strconv.FormatInt(ts.UnixNano(), 10)},
+		"direction": []string{"forward"},
+		"limit":     []string{"100"},
+	}
+	u.RawQuery = vals.Encode()
+	s.log.Debugf("Query URL: %s", u.String())
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return fmt.Errorf("error creating query request: %w", err)
+	}
+
+	if s.cfg.TokenFile != "" {
+		tokenBytes, err := os.ReadFile(s.cfg.TokenFile)
+		if err != nil {
+			return fmt.Errorf("can not read token file: %w", err)
+		}
+		token := strings.TrimSpace(string(tokenBytes))
+
+		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
+		s.log.Debugf("Using bearer token: %s", token[:10])
+	}
+
+	client := s.createHTTPClient()
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error executing query request: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("query request failed with status %d: %w", res.StatusCode, errHTTPStatus)
+	}
+
+	var response loki.Response
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+		return fmt.Errorf("error parsing query response: %w", err)
+	}
+
+	s.parseStreams(response.Data.Result)
+	return nil
 }

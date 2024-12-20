@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
@@ -43,10 +44,11 @@ type SinkConfig struct {
 }
 
 type LokiClientSink struct {
-	URL       string     `yaml:"url"`
-	TLS       *TLSConfig `yaml:"tls"`
-	TokenFile string     `yaml:"tokenFile"`
-	Query     string     `yaml:"query"`
+	URL           string        `yaml:"url"`
+	TLS           *TLSConfig    `yaml:"tls"`
+	TokenFile     string        `yaml:"tokenFile"`
+	Query         string        `yaml:"query"`
+	QueryInterval time.Duration `yaml:"queryInterval"`
 }
 
 type TLSConfig struct {

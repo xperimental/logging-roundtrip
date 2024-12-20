@@ -26,6 +26,7 @@ linters-settings:
       - (*os.File).Close
       - fmt.Fprintln
       - (*github.com/coder/websocket.Conn).Close
+      - (io.ReadCloser).Close
 
 linters:
   enable-all: false
