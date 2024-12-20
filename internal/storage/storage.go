@@ -122,8 +122,9 @@ func (s *Storage) Seen(id uint64, t time.Time) {
 	s.log.Debugf("Message %v had delay %s", id, delay)
 }
 
-func (s *Storage) OldestUnseenTime() time.Time {
+func (s *Storage) OldestUnseenTime() (time.Time, bool) {
 	oldest := s.clock()
+	haveUnseen := false
 
 	s.messages.Range(func(_, v interface{}) bool {
 		msg := v.(message)
@@ -131,13 +132,14 @@ func (s *Storage) OldestUnseenTime() time.Time {
 			return true
 		}
 
+		haveUnseen = true
 		if msg.Timestamp.Before(oldest) {
 			oldest = msg.Timestamp
 		}
 		return true
 	})
 
-	return oldest
+	return oldest, haveUnseen
 }
 
 func (s *Storage) printStatisticsInner() {
