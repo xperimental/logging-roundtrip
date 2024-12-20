@@ -10,15 +10,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type StoreOp func(messages map[uint64]message) error
-
 type Storage struct {
 	log         logrus.FieldLogger
 	clock       func() time.Time
 	startupTime time.Time
 
-	ops         chan StoreOp
-	messages    map[uint64]message
+	messages    sync.Map
 	metricCount prometheus.Counter
 	metricDelay prometheus.Histogram
 }
@@ -39,8 +36,7 @@ func New(log logrus.FieldLogger, clock func() time.Time, registry prometheus.Reg
 		log:         log,
 		clock:       clock,
 		startupTime: clock(),
-		ops:         make(chan StoreOp, 1),
-		messages:    map[uint64]message{},
+		messages:    sync.Map{},
 		metricCount: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "roundtrip_storage_messages_produced_total",
 			Help: "Total number of messages produced by storage",
@@ -63,7 +59,6 @@ func (s *Storage) Start(ctx context.Context, wg *sync.WaitGroup, _ chan<- error)
 
 	go func() {
 		defer wg.Done()
-		defer close(s.ops)
 
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
@@ -74,10 +69,6 @@ func (s *Storage) Start(ctx context.Context, wg *sync.WaitGroup, _ chan<- error)
 				return
 			case <-ticker.C:
 				s.printStatisticsInner()
-			case op := <-s.ops:
-				if err := op(s.messages); err != nil {
-					s.log.Debugf("Error during store operation: %s", err)
-				}
 			}
 		}
 	}()
@@ -93,95 +84,77 @@ func (s *Storage) Create(id uint64, time time.Time) string {
 		Timestamp: time,
 	}
 
-	s.ops <- func(messages map[uint64]message) error {
-		messages[msg.ID] = msg
-		return nil
-	}
-
+	s.messages.Store(msg.ID, msg)
 	s.metricCount.Inc()
 	return msg.String()
 }
 
 func (s *Storage) Count() int {
-	resCh := make(chan int, 1)
-	s.ops <- func(messages map[uint64]message) error {
-		resCh <- len(messages)
-		return nil
-	}
+	count := 0
+	s.messages.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
 
-	return <-resCh
+	return count
 }
 
 func (s *Storage) Seen(id uint64, t time.Time) {
-	s.ops <- func(messages map[uint64]message) error {
-		msg, ok := s.messages[id]
-		if !ok {
-			s.log.Warnf("Found unknown message with ID %v", id)
-			return nil
-		}
-
-		if msg.Seen {
-			// silently ignore duplicates
-			return nil
-		}
-
-		msg.Seen = true
-		msg.SeenTimestamp = t
-		s.messages[id] = msg
-
-		delay := t.Sub(msg.Timestamp)
-		s.metricDelay.Observe(delay.Seconds())
-		s.log.Debugf("Message %v had delay %s", id, delay)
-
-		return nil
+	v, ok := s.messages.Load(id)
+	if !ok {
+		s.log.Warnf("Found unknown message with ID %v", id)
+		return
 	}
-}
 
-func (s *Storage) ResetSeen() {
-	s.ops <- func(messages map[uint64]message) error {
-		for id := range s.messages {
-			msg := s.messages[id]
-			msg.Seen = false
-			s.messages[id] = msg
-		}
-
-		return nil
+	msg := v.(message)
+	if msg.Seen {
+		// silently ignore duplicates
+		return
 	}
+
+	msg.Seen = true
+	msg.SeenTimestamp = t
+
+	s.messages.Store(id, msg)
+
+	delay := t.Sub(msg.Timestamp)
+	s.metricDelay.Observe(delay.Seconds())
+	s.log.Debugf("Message %v had delay %s", id, delay)
 }
 
 func (s *Storage) OldestUnseenTime() time.Time {
-	resultCh := make(chan time.Time, 1)
-	defer close(resultCh)
+	oldest := s.clock()
 
-	s.ops <- func(messages map[uint64]message) error {
-		oldest := time.Now()
-		for _, msg := range messages {
-			if msg.Seen {
-				continue
-			}
-
-			if msg.Timestamp.Before(oldest) {
-				oldest = msg.Timestamp
-			}
+	s.messages.Range(func(_, v interface{}) bool {
+		msg := v.(message)
+		if msg.Seen {
+			return true
 		}
 
-		resultCh <- oldest
-		return nil
-	}
+		if msg.Timestamp.Before(oldest) {
+			oldest = msg.Timestamp
+		}
+		return true
+	})
 
-	return <-resultCh
+	return oldest
 }
 
 func (s *Storage) printStatisticsInner() {
 	created := 0
 	seen := 0
-	for _, m := range s.messages {
+
+	s.messages.Range(func(_, v interface{}) bool {
 		created++
-		if m.Seen {
+
+		msg := v.(message)
+		if msg.Seen {
 			seen++
 		}
-	}
-	percent := float64(seen) / float64(created) * 100
 
+		return true
+	})
+
+	percent := float64(seen) / float64(created) * 100
 	s.log.Infof("Message state: %d messages sent, %d seen (%.3f %%)", created, seen, percent)
 }
