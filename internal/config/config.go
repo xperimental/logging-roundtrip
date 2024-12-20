@@ -49,6 +49,7 @@ type LokiClientSink struct {
 	TokenFile     string        `yaml:"tokenFile"`
 	Query         string        `yaml:"query"`
 	QueryInterval time.Duration `yaml:"queryInterval"`
+	QueryLimit    uint64        `yaml:"queryLimit"`
 }
 
 type TLSConfig struct {

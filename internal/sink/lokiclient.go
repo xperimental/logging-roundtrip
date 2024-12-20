@@ -39,6 +39,7 @@ const (
 	disconnectCommand command = "disconnect"
 
 	defaultQueryInterval = 10 * time.Second
+	defaultQueryLimit    = 1000
 
 	lokiTailPath  = "loki/api/v1/tail"
 	lokiQueryPath = "loki/api/v1/query_range"
@@ -108,6 +109,10 @@ func (s *lokiClientSink) receiveMessages(ctx context.Context) error {
 
 	if s.cfg.QueryInterval == 0 {
 		s.cfg.QueryInterval = defaultQueryInterval
+	}
+
+	if s.cfg.QueryLimit == 0 {
+		s.cfg.QueryLimit = defaultQueryLimit
 	}
 
 	s.log.Debugf("Query interval: %s", s.cfg.QueryInterval)
@@ -256,7 +261,7 @@ func (s *lokiClientSink) queryMessagesInner(ctx context.Context, ts time.Time) e
 		"start":     []string{strconv.FormatInt(s.store.Startup().UnixNano(), 10)},
 		"end":       []string{strconv.FormatInt(ts.UnixNano(), 10)},
 		"direction": []string{"forward"},
-		"limit":     []string{"100"},
+		"limit":     []string{strconv.FormatUint(s.cfg.QueryLimit, 10)},
 	}
 	u.RawQuery = vals.Encode()
 	s.log.Debugf("Query URL: %s", u.String())
