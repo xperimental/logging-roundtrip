@@ -29,7 +29,18 @@ type SourceConfig struct {
 	LogsPerSecond float64 `yaml:"logsPerSecond"`
 }
 
+type SinkType string
+
+const (
+	SinkTypeLokiClient SinkType = "lokiClient"
+)
+
 type SinkConfig struct {
+	Type       SinkType        `yaml:"type"`
+	LokiClient *LokiClientSink `yaml:"lokiClient"`
+}
+
+type LokiClientSink struct {
 	URL       string     `yaml:"url"`
 	TLS       *TLSConfig `yaml:"tls"`
 	TokenFile string     `yaml:"tokenFile"`

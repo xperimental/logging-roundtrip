@@ -42,7 +42,11 @@ func main() {
 
 	registry := prometheus.NewRegistry()
 	store := storage.New(log, time.Now, registry)
-	s := sink.New(cfg.Sink, log, store)
+
+	s, err := sink.New(cfg.Sink, log, store)
+	if err != nil {
+		log.Fatalf("Can not initialize sink: %s", err)
+	}
 
 	components := []component.Component{
 		store,

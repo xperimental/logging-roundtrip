@@ -2,8 +2,10 @@ logLevel: info
 source:
   logsPerSecond: 3
 sink:
-  url: https://lokistack-dev-gateway-http.openshift-logging.svc:8080/api/logs/v1/application/loki/api/v1/tail
-  query: '{kubernetes_namespace_name="logging-roundtrip",kubernetes_container_name="roundtrip"} | json | kubernetes_container_iostream="stdout"'
-  tokenFile: /var/run/secrets/logs/token
-  tls:
-    insecureSkipVerify: true
+  type: lokiClient
+  lokiClient:
+    url: https://lokistack-dev-gateway-http.openshift-logging.svc:8080/api/logs/v1/application/loki/api/v1/tail
+    query: '{kubernetes_namespace_name="logging-roundtrip",kubernetes_container_name="roundtrip"} | json | kubernetes_container_iostream="stdout"'
+    tokenFile: /var/run/secrets/logs/token
+    tls:
+      insecureSkipVerify: true
