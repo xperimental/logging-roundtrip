@@ -258,7 +258,7 @@ func (s *lokiClientSink) queryMessagesInner(ctx context.Context, ts time.Time) e
 
 	vals := url.Values{
 		"query":     []string{s.cfg.Query},
-		"start":     []string{strconv.FormatInt(s.store.Startup().UnixNano(), 10)},
+		"start":     []string{strconv.FormatInt(s.store.OldestUnseenTime().UnixNano(), 10)},
 		"end":       []string{strconv.FormatInt(ts.UnixNano(), 10)},
 		"direction": []string{"forward"},
 		"limit":     []string{strconv.FormatUint(s.cfg.QueryLimit, 10)},

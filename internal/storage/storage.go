@@ -149,6 +149,29 @@ func (s *Storage) ResetSeen() {
 	}
 }
 
+func (s *Storage) OldestUnseenTime() time.Time {
+	resultCh := make(chan time.Time, 1)
+	defer close(resultCh)
+
+	s.ops <- func(messages map[uint64]message) error {
+		oldest := time.Now()
+		for _, msg := range messages {
+			if msg.Seen {
+				continue
+			}
+
+			if msg.Timestamp.Before(oldest) {
+				oldest = msg.Timestamp
+			}
+		}
+
+		resultCh <- oldest
+		return nil
+	}
+
+	return <-resultCh
+}
+
 func (s *Storage) printStatisticsInner() {
 	created := 0
 	seen := 0
