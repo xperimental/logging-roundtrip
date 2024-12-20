@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
 
-type StoreOp func(messages map[int64]message) error
+type StoreOp func(messages map[uint64]message) error
 
 type Storage struct {
 	log         logrus.FieldLogger
@@ -19,14 +18,13 @@ type Storage struct {
 	startupTime time.Time
 
 	ops         chan StoreOp
-	messages    map[int64]message
-	nextID      atomic.Int64
+	messages    map[uint64]message
 	metricCount prometheus.Counter
 	metricDelay prometheus.Histogram
 }
 
 type message struct {
-	ID            int64
+	ID            uint64
 	Timestamp     time.Time
 	Seen          bool
 	SeenTimestamp time.Time
@@ -42,8 +40,7 @@ func New(log logrus.FieldLogger, clock func() time.Time, registry prometheus.Reg
 		clock:       clock,
 		startupTime: clock(),
 		ops:         make(chan StoreOp, 1),
-		messages:    map[int64]message{},
-		nextID:      atomic.Int64{},
+		messages:    map[uint64]message{},
 		metricCount: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "roundtrip_storage_messages_produced_total",
 			Help: "Total number of messages produced by storage",
@@ -90,13 +87,13 @@ func (s *Storage) Startup() time.Time {
 	return s.startupTime
 }
 
-func (s *Storage) Create() string {
+func (s *Storage) Create(id uint64, time time.Time) string {
 	msg := message{
-		ID:        s.nextID.Add(1),
-		Timestamp: s.clock(),
+		ID:        id,
+		Timestamp: time,
 	}
 
-	s.ops <- func(messages map[int64]message) error {
+	s.ops <- func(messages map[uint64]message) error {
 		messages[msg.ID] = msg
 		return nil
 	}
@@ -107,7 +104,7 @@ func (s *Storage) Create() string {
 
 func (s *Storage) Count() int {
 	resCh := make(chan int, 1)
-	s.ops <- func(messages map[int64]message) error {
+	s.ops <- func(messages map[uint64]message) error {
 		resCh <- len(messages)
 		return nil
 	}
@@ -115,9 +112,14 @@ func (s *Storage) Count() int {
 	return <-resCh
 }
 
-func (s *Storage) Seen(id int64, t time.Time) {
-	s.ops <- func(messages map[int64]message) error {
-		msg := s.messages[id]
+func (s *Storage) Seen(id uint64, t time.Time) {
+	s.ops <- func(messages map[uint64]message) error {
+		msg, ok := s.messages[id]
+		if !ok {
+			s.log.Warnf("Found unknown message with ID %v", id)
+			return nil
+		}
+
 		msg.Seen = true
 		msg.SeenTimestamp = t
 		s.messages[id] = msg
@@ -131,7 +133,7 @@ func (s *Storage) Seen(id int64, t time.Time) {
 }
 
 func (s *Storage) ResetSeen() {
-	s.ops <- func(messages map[int64]message) error {
+	s.ops <- func(messages map[uint64]message) error {
 		for id := range s.messages {
 			msg := s.messages[id]
 			msg.Seen = false

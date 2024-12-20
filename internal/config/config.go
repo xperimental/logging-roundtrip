@@ -26,7 +26,9 @@ type ServerConfig struct {
 }
 
 type SourceConfig struct {
-	LogsPerSecond float64 `yaml:"logsPerSecond"`
+	StartID          uint64  `yaml:"startID"`
+	LogsPerSecond    float64 `yaml:"logsPerSecond"`
+	NumberOfMessages uint64  `yaml:"numberOfMessages"`
 }
 
 type SinkType string

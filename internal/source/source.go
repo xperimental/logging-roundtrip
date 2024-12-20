@@ -23,6 +23,9 @@ type source struct {
 	log     logrus.FieldLogger
 	storage *storage.Storage
 	output  io.Writer
+
+	messageCount uint64
+	messageID    uint64
 }
 
 func New(cfg config.SourceConfig, log *logrus.Logger, storage *storage.Storage) component.Component {
@@ -45,23 +48,37 @@ func (s *source) Start(ctx context.Context, wg *sync.WaitGroup, errCh chan<- err
 			return
 		}
 
+		s.messageID = s.cfg.StartID
+
 		interval := time.Duration(float64(time.Second) / s.cfg.LogsPerSecond)
 		s.log.Debugf("Source interval: %v", interval)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
 		s.log.Debug("Started source.")
+	loop:
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
-				msg := s.storage.Create()
+			case ts := <-ticker.C:
+				msg := s.storage.Create(s.nextID(), ts)
 
 				if _, err := s.output.Write([]byte(msg)); err != nil {
 					errCh <- fmt.Errorf("error writing to output: %w", err)
 				}
+
+				s.messageCount++
+				if s.cfg.NumberOfMessages > 0 && s.messageCount >= s.cfg.NumberOfMessages {
+					s.log.Debugf("Reached number of messages limit: %v", s.cfg.NumberOfMessages)
+					break loop
+				}
 			}
 		}
 	}()
+}
+
+func (s *source) nextID() uint64 {
+	s.messageID++
+	return s.messageID
 }

@@ -137,7 +137,7 @@ func (s *lokiClientSink) receiveMessages(ctx context.Context) error {
 						continue
 					}
 
-					msgId, err := strconv.ParseInt(idMatch[3:], 10, 64)
+					msgId, err := strconv.ParseUint(idMatch[3:], 10, 64)
 					if err != nil {
 						s.log.Errorf("Error parsing message id: %s", err)
 						continue
